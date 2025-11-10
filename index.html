@@ -1,0 +1,942 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bảng Đăng Ký Cơm Chia Sẻ - Tính Giá Linh Hoạt</title>
+    <!-- Tải Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Cấu hình Font và Tailwind -->
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap');
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f7f9fb;
+        }
+        .table-container {
+            /* Quan trọng: Bật cuộn ngang */
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+        }
+        
+        /* Cấu hình ô cơ bản */
+        th, td {
+            min-width: 80px; 
+            text-align: center;
+            padding: 8px 4px;
+            vertical-align: middle;
+            height: 48px; 
+            white-space: nowrap;
+        }
+        
+        /* Đảm bảo thead có position: relative để sticky bên trong hoạt động */
+        #meal-table thead {
+            position: sticky;
+            top: 0; /* Giữ cố định header khi cuộn dọc */
+            z-index: 10;
+        }
+
+        /* Định nghĩa chung cho cột cố định (sticky) */
+        .sticky-col-header {
+            position: sticky;
+            background-color: #1e3a8a; /* Màu nền cho Header */
+            z-index: 20; 
+        }
+        
+        /* Cột STT (Fixed Left) */
+        .stt-col { left: 0px; width: 50px; }
+        
+        /* Cột HỌ VÀ TÊN (Fixed Left) */
+        .name-col { 
+            left: 50px; 
+            width: 250px; 
+            text-align: left; 
+        }
+
+        /* Cột TỔNG BỮA (Fixed Right) */
+        .total-col { 
+            right: 150px; 
+            min-width: 80px; 
+            font-weight: 600;
+            z-index: 20; 
+            border-left: 2px solid #a5b4fc; 
+        }
+
+        /* Cột THÀNH TIỀN (Fixed Right - Cột ngoài cùng) */
+        .price-col { 
+            right: 0px; 
+            min-width: 150px; 
+            font-weight: 700;
+            z-index: 20; 
+            border-left: 2px solid #6366f1; 
+            color: #1e3a8a;
+        }
+        
+        /* --- Hàng CHỌN GIÁ - CỐ ĐỊNH PHÍA TRÊN DỮ LIỆU --- */
+        .sticky-price-row {
+            position: sticky;
+            /* Tính toán lại top: Chiều cao của 3 hàng header trên (130px) */
+            top: 130px; 
+            z-index: 15; /* Nằm dưới header chính (z-index 20) */
+            background-color: #f0f4ff; /* Nền đồng nhất cho hàng */
+        }
+
+        /* Cột cố định trái/phải trong hàng CHỌN GIÁ */
+        .sticky-price-row th {
+            border-top: 2px solid #c7d2fe;
+            color: #1e3a8a;
+        }
+
+        /* Đảm bảo các cột dính (sticky) ở hàng này phải dính vị trí và có Z-index cao */
+        .sticky-price-row .sticky-col-header {
+            position: sticky;
+            background-color: #f0f4ff; /* Nền nhạt để nổi bật */
+            z-index: 35; /* Z-index cao để đè lên cột ngày khi cuộn ngang */
+        }
+        
+        /* Đảm bảo các cột dính bên PHẢI có z-index cao nhất để che các ô ngày khi cuộn */
+        .sticky-price-row .total-col,
+        .sticky-price-row .price-col {
+             background-color: #f0f4ff; /* Nền nhạt */
+             z-index: 40; /* Rất quan trọng: Phải cao hơn các ô ngày (z-index 15) */
+        }
+        
+        /* Các ô ngày trong hàng CHỌN GIÁ phải trôi ngang cùng bảng */
+        .sticky-price-row .day-price-cell {
+            position: relative; 
+            z-index: 5; /* Z-index thấp nhất */
+        }
+        
+        /* --- Dữ liệu Body: Cột cố định trái/phải phải có nền trắng --- */
+        .sticky-col-name {
+            position: sticky;
+            background-color: white; 
+            z-index: 10;
+        }
+        
+        /* Fixed Footer */
+        #meal-table tfoot .sticky-col-name {
+            position: sticky;
+            z-index: 10;
+        }
+        #meal-table tfoot tr {
+            position: sticky;
+            bottom: 0;
+            z-index: 10;
+            box-shadow: 0 -4px 6px -1px rgba(0, 0, 0, 0.1); /* Tạo bóng để tách biệt */
+        }
+
+
+        /* Thẻ chứa 2 checkbox */
+        .meal-toggle-pair {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 8px; 
+        }
+
+        /* Tăng kích thước checkbox */
+        .form-checkbox {
+            height: 1.15rem;
+            width: 1.15rem;
+            border-radius: 4px;
+        }
+        
+        /* Nút nhấn */
+        .btn-primary {
+            @apply px-4 py-2 bg-blue-600 text-white font-medium rounded-lg shadow-md hover:bg-blue-700 transition duration-150 ease-in-out;
+        }
+        
+        /* Màu sắc cho nút chọn giá */
+        .color-green { background-color: #34d399; color: #065f46; font-weight: 600; } /* 30K */
+        .color-yellow { background-color: #fcd34d; color: #92400e; font-weight: 600; } /* 35K */
+        .color-red { background-color: #f87171; color: #991b1b; font-weight: 600; } /* 40K */
+
+        /* Cần thiết cho Modal */
+        .modal {
+            transition: opacity 0.3s ease-in-out;
+        }
+        .modal-content {
+            transition: transform 0.3s ease-in-out;
+        }
+
+        /* Cấu hình Dropdown cho nút chọn giá */
+        .price-dropdown {
+            z-index: 50; 
+            position: relative;
+        }
+        .price-dropdown-content {
+            right: 0;
+            width: max-content; 
+        }
+    </style>
+    <!-- Tải Firebase SDKs -->
+    <script type="module">
+        // --- KHỞI TẠO BIẾN TOÀN CỤC VÀ HẰNG SỐ CỦA CANVAS ---
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+        
+        // --- FIREBASE IMPORTS ---
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // Constants
+        const TOTAL_DAYS = 31;
+        const PRICE_CONFIG = {
+            'green': 30000,
+            'yellow': 35000,
+            'red': 40000
+        };
+        const initialPeople = [
+            { id: 1, name: "Phạm Duy Tượng" },
+            { id: 2, name: "Lưu Đức Vinh" },
+            { id: 3, name: "Phạm Sỹ Công" },
+            { id: 4, name: "Lê Đức Ân" },
+            { id: 5, name: "Nguyễn Duy Phúc" },
+            { id: 6, name: "Mai Quốc Toản" },
+            { id: 7, name: "Trần Xuân Huy" },
+            { id: 8, name: "Nguyễn Văn Hoài" } 
+        ];
+
+        // --- KHỞI TẠO FIREBASE ---
+        setLogLevel('Debug');
+        let app, db, auth;
+        let userId = null; 
+        let mealData = []; 
+        let dayPriceConfig = {}; 
+        let personToDelete = null;
+        let unsubscribeMealData = null; 
+        
+        // --- UI ELEMENTS ---
+        const statusMessage = document.getElementById('app-status');
+        const loadingSpinner = document.getElementById('loading-spinner');
+
+        // --- HÀM HỖ TRỢ HIỂN THỊ THÔNG BÁO ---
+        function showMessage(element, text, isError = false) {
+            element.textContent = text;
+            element.classList.remove('hidden', 'text-red-600', 'text-green-600');
+            element.classList.add(isError ? 'text-red-600' : 'text-green-600', 'font-medium');
+        }
+        
+        function setLoading(isLoading) {
+            if (isLoading) {
+                loadingSpinner.classList.remove('hidden');
+            } else {
+                loadingSpinner.classList.add('hidden');
+            }
+        }
+
+        // --- CORE: XỬ LÝ TRẠNG THÁI NGƯỜI DÙNG & TẢI DỮ LIỆU ---
+        async function setupFirebase() {
+            setLoading(true);
+            try {
+                if (Object.keys(firebaseConfig).length === 0) {
+                    throw new Error("Không tìm thấy cấu hình Firebase.");
+                }
+
+                app = initializeApp(firebaseConfig);
+                db = getFirestore(app);
+                auth = getAuth(app);
+                
+                // 1. Đăng nhập Ban đầu (Ẩn danh hoặc Custom Token)
+                let user;
+                if (initialAuthToken) {
+                    user = (await signInWithCustomToken(auth, initialAuthToken)).user;
+                } else {
+                    user = (await signInAnonymously(auth)).user;
+                }
+                
+                userId = user.uid;
+                showMessage(statusMessage, `Ứng dụng đã sẵn sàng. Dữ liệu được lưu tự động và chia sẻ. (User ID: ${userId})`, false);
+                
+                // Load data sau khi Auth xong
+                loadData(); 
+
+            } catch (error) {
+                console.error("Firebase Initialization Error:", error);
+                showMessage(statusMessage, `Lỗi khởi tạo: ${error.message}.`, true);
+                setLoading(false);
+            }
+        }
+
+
+        // --- FIREBASE FIRESTORE FUNCTIONS ---
+        
+        window.getCurrentDocRef = () => {
+            const month = document.getElementById('month-select').value;
+            const year = document.getElementById('year-select').value;
+            const docId = `${year}-${month}`;
+            // Sử dụng đường dẫn công khai để chia sẻ dữ liệu chung cho tất cả người dùng
+            return { docRef: doc(db, 'artifacts', appId, 'public', 'data', 'meal_registration', docId), docId };
+        };
+
+        window.loadData = () => {
+            if (!db || !userId) {
+                // Kiểm tra xem đã có data từ lần chạy trước chưa
+                if (window.app && window.db && window.auth && window.userId) {
+                    db = window.db;
+                    userId = window.userId;
+                } else {
+                    console.warn("Database or User ID not ready. Trying to setup...");
+                    // Nếu chưa sẵn sàng, cố gắng chạy setup lại (thường chỉ chạy 1 lần)
+                    if (!app && !db) {
+                        setupFirebase();
+                    }
+                    return;
+                }
+            }
+            
+            if (unsubscribeMealData) {
+                unsubscribeMealData();
+            }
+
+            const { docRef } = getCurrentDocRef();
+            document.getElementById('loading-indicator').classList.remove('hidden');
+            document.getElementById('meal-table').innerHTML = ''; 
+
+            // onSnapshot trả về hàm hủy đăng ký
+            unsubscribeMealData = onSnapshot(docRef, async (docSnap) => {
+                document.getElementById('loading-indicator').classList.add('hidden');
+                
+                let currentData;
+                const month = parseInt(document.getElementById('month-select').value);
+                const year = parseInt(document.getElementById('year-select').value);
+                const actualDaysInMonth = new Date(year, month, 0).getDate();
+
+                if (docSnap.exists()) {
+                    currentData = docSnap.data();
+                } else {
+                    // Nếu không có dữ liệu, tạo dữ liệu mặc định và lưu vào Firestore
+                    currentData = await createDefaultMealData(month, year);
+                    await setDoc(docRef, currentData, { merge: true }); 
+                }
+
+                // Cập nhật biến toàn cục
+                mealData = currentData.data || [];
+                dayPriceConfig = currentData.dayPriceConfig || {};
+                
+                // Đảm bảo cấu hình giá cho các ngày trong tháng hiện tại là hợp lệ
+                let updatedConfig = false;
+                for (let d = 1; d <= actualDaysInMonth; d++) {
+                    const currentPriceKey = dayPriceConfig[d];
+                    if (!currentPriceKey || !PRICE_CONFIG.hasOwnProperty(currentPriceKey)) {
+                        dayPriceConfig[d] = 'green';
+                        updatedConfig = true;
+                    }
+                }
+                
+                if (updatedConfig) {
+                    await setDoc(docRef, { dayPriceConfig: dayPriceConfig }, { merge: true });
+                }
+
+                // Cập nhật giao diện
+                window.renderTable(month, year, mealData, dayPriceConfig);
+
+            }, (error) => {
+                console.error("Lỗi khi tải dữ liệu từ Firestore:", error);
+                showMessage(statusMessage, "Lỗi tải dữ liệu. Vui lòng thử lại.", true);
+            });
+        };
+
+        // Hàm tạo dữ liệu mặc định
+        async function createDefaultMealData(month, year) {
+            const initialMealData = initialPeople.map(person => {
+                const meals = {};
+                for (let i = 1; i <= TOTAL_DAYS; i++) {
+                    meals[i] = { lunch: false, dinner: false };
+                }
+                return { id: person.id, name: person.name, meals };
+            });
+
+            const initialDayPriceConfig = {};
+            const actualDaysInMonth = new Date(year, month, 0).getDate();
+            for (let d = 1; d <= actualDaysInMonth; d++) {
+                initialDayPriceConfig[d] = 'green'; 
+            }
+
+            return {
+                unit: "Đội Truyền tải điện Quảng Trị - Tổ QLVH TBA 500KV Quảng Trị",
+                month: month,
+                year: year,
+                data: initialMealData,
+                dayPriceConfig: initialDayPriceConfig
+            };
+        }
+
+        // --- Xử lý Cập nhật Dữ liệu Bữa ăn ---
+        window.handleMealToggle = async (personId, day, mealType, checked) => {
+            if (!db || !userId) {
+                console.error("Firebase chưa sẵn sàng.");
+                return;
+            }
+
+            const { docRef } = getCurrentDocRef();
+
+            const personIndex = mealData.findIndex(p => p.id === personId);
+            if (personIndex === -1) {
+                console.error("Không tìm thấy người dùng có ID:", personId);
+                return;
+            }
+
+            if (!mealData[personIndex].meals[day]) {
+                mealData[personIndex].meals[day] = { lunch: false, dinner: false };
+            }
+            mealData[personIndex].meals[day][mealType] = checked;
+
+            try {
+                // Lưu toàn bộ mảng data (chỉ là một phần của document)
+                await setDoc(docRef, { data: mealData }, { merge: true });
+            } catch (error) {
+                console.error("Lỗi khi cập nhật Firestore:", error);
+            }
+        };
+        
+        // --- Xử lý Cập nhật MÀU SẮC (Giá) theo Ngày ---
+        window.updateDayColor = async (day, color) => {
+            if (!db || !userId) {
+                console.error("Firebase chưa sẵn sàng.");
+                return;
+            }
+            if (dayPriceConfig[day] === color) return; 
+
+            const { docRef } = getCurrentDocRef();
+
+            dayPriceConfig[day] = color;
+            
+            try {
+                // Lưu toàn bộ cấu hình giá (là một phần của document)
+                await setDoc(docRef, { dayPriceConfig: dayPriceConfig }, { merge: true });
+                
+                // Cập nhật UI ngay lập tức
+                const priceText = getPriceByColor(color).toLocaleString('vi-VN').replace(/₫/g, '');
+                const button = document.getElementById(`day-price-btn-${day}`);
+                if (button) {
+                     button.className = `p-1 text-xs color-${color} rounded-md w-full font-bold flex items-center justify-center gap-1 shadow-md hover:shadow-lg transition`;
+                     button.title = `Giá: ${PRICE_CONFIG[color].toLocaleString('vi-VN')} VNĐ`;
+                     button.querySelector('span').textContent = priceText;
+                }
+                
+                window.closeAllDropdowns();
+
+            } catch (error) {
+                console.error("Lỗi khi cập nhật màu ngày:", error);
+            }
+        };
+        
+        // --- Dropdown ---
+        window.toggleDropdown = (day) => {
+            const dropdown = document.getElementById(`day-dropdown-content-${day}`);
+            if (dropdown) {
+                const isVisible = dropdown.classList.contains('visible');
+                
+                window.closeAllDropdowns(day); 
+
+                if (isVisible) {
+                    dropdown.classList.remove('opacity-100', 'visible');
+                    dropdown.classList.add('opacity-0', 'invisible');
+                } else {
+                    dropdown.classList.remove('opacity-0', 'invisible');
+                    dropdown.classList.add('opacity-100', 'visible');
+                }
+            }
+        };
+
+        window.closeAllDropdowns = (exceptDay = null) => {
+            const monthVal = document.getElementById('month-select').value;
+            const yearVal = document.getElementById('year-select').value;
+            if (!monthVal || !yearVal) return;
+            
+            const actualDaysInMonth = new Date(parseInt(yearVal), parseInt(monthVal), 0).getDate();
+            for (let d = 1; d <= actualDaysInMonth; d++) {
+                if (d !== exceptDay) {
+                    const dropdown = document.getElementById(`day-dropdown-content-${d}`);
+                    if (dropdown) {
+                        dropdown.classList.remove('opacity-100', 'visible');
+                        dropdown.classList.add('opacity-0', 'invisible');
+                    }
+                }
+            }
+        }
+        
+        document.addEventListener('click', (event) => {
+            const dropdownContainers = document.querySelectorAll('.price-dropdown');
+            let isClickInsideDropdown = false;
+            
+            dropdownContainers.forEach(container => {
+                const button = container.querySelector('button');
+                if (button && event.target === button || button.contains(event.target)) {
+                    isClickInsideDropdown = true;
+                } else if (container.contains(event.target)) {
+                    isClickInsideDropdown = true;
+                }
+            });
+            
+            if (!isClickInsideDropdown) {
+                window.closeAllDropdowns();
+            }
+        });
+
+
+        // --- Xử lý Thêm Người ---
+        window.addNewPerson = async () => {
+            const newNameInput = document.getElementById('new-person-name');
+            const newName = newNameInput.value.trim();
+
+            if (!newName) {
+                showMessage(document.getElementById('add-person-message'), "Vui lòng nhập tên người cần thêm.", true);
+                setTimeout(() => showMessage(document.getElementById('add-person-message'), `Dữ liệu được lưu tự động và chia sẻ. (User ID: ${userId})`, false), 3000);
+                return;
+            }
+            
+            if (!db || !userId) {
+                console.error("Firebase chưa sẵn sàng.");
+                return;
+            }
+            const { docRef } = getCurrentDocRef();
+
+            const maxId = mealData.reduce((max, person) => Math.max(max, person.id), 0);
+            const newId = maxId + 1;
+
+            const newMeals = {};
+            for (let i = 1; i <= TOTAL_DAYS; i++) {
+                newMeals[i] = { lunch: false, dinner: false };
+            }
+
+            const newPerson = {
+                id: newId,
+                name: newName,
+                meals: newMeals
+            };
+
+            // Cập nhật local data trước
+            mealData.push(newPerson);
+
+            try {
+                // Lưu toàn bộ mảng data mới
+                await setDoc(docRef, { data: mealData }, { merge: true });
+                newNameInput.value = ''; 
+                showMessage(document.getElementById('add-person-message'), `Đã thêm ${newName}.`, false);
+                setTimeout(() => showMessage(document.getElementById('add-person-message'), `Dữ liệu được lưu tự động và chia sẻ. (User ID: ${userId})`, false), 3000);
+            } catch (error) {
+                console.error("Lỗi khi thêm người mới:", error);
+                showMessage(document.getElementById('add-person-message'), `Lỗi: Không thể thêm người.`, true);
+                mealData.pop(); // Revert local change
+            }
+        };
+
+        // --- Xử lý XÓA Người ---
+        window.promptDeletePerson = (personId, personName) => {
+            personToDelete = { id: personId, name: personName };
+            document.getElementById('modal-person-name').textContent = personName;
+            document.getElementById('delete-modal').classList.remove('opacity-0', 'pointer-events-none');
+        };
+
+        window.closeDeleteModal = () => {
+            document.getElementById('delete-modal').classList.add('opacity-0', 'pointer-events-none');
+            personToDelete = null;
+        };
+
+        window.confirmDeletePerson = async () => {
+            if (!personToDelete || !db || !userId) {
+                closeDeleteModal();
+                return;
+            }
+
+            const { id: personId, name: personName } = personToDelete;
+            const { docRef } = getCurrentDocRef();
+            
+            const initialMealData = [...mealData]; // Sao lưu để khôi phục nếu lỗi
+            mealData = mealData.filter(p => p.id !== personId);
+            
+            if (mealData.length === initialMealData.length) {
+                closeDeleteModal();
+                return;
+            }
+
+            try {
+                // Lưu mảng data đã được lọc
+                await setDoc(docRef, { data: mealData }, { merge: true });
+                
+                showMessage(document.getElementById('add-person-message'), `Đã xóa ${personName} thành công.`, false);
+                setTimeout(() => showMessage(document.getElementById('add-person-message'), `Dữ liệu được lưu tự động và chia sẻ. (User ID: ${userId})`, false), 5000);
+
+            } catch (error) {
+                console.error("Lỗi khi xóa người dùng:", error);
+                showMessage(document.getElementById('add-person-message'), `Lỗi: Không thể xóa ${personName}.`, true);
+                mealData = initialMealData; // Khôi phục nếu lỗi
+            } finally {
+                closeDeleteModal();
+            }
+        };
+
+        // --- Hàm lấy Giá tiền theo Màu ---
+        window.getPriceByColor = (color) => {
+            return PRICE_CONFIG[color] || PRICE_CONFIG['green'];
+        };
+
+
+        // --- Render Bảng ---
+        window.renderTable = (month, year, data, dayConfig) => {
+            const table = document.getElementById('meal-table');
+            const info = document.getElementById('table-info');
+            
+            table.innerHTML = '';
+            
+            if (data.length === 0) {
+                table.innerHTML = '<tr><td colspan="50" class="p-4 text-center text-gray-500">Không có dữ liệu người đăng ký. Vui lòng thêm người.</td></tr>';
+                return;
+            }
+
+            const actualDaysInMonth = new Date(year, month, 0).getDate();
+
+
+            // 1. Render Header (3 hàng tiêu đề)
+            let header = `
+                <thead class="bg-blue-800 text-white shadow-lg">
+                    <!-- Hàng 1: Tiêu đề lớn -->
+                    <tr>
+                        <th class="sticky-col-header text-left stt-col bg-blue-900" colspan="2">Bảng Đăng Ký Cơm Tháng ${month} Năm ${year}</th>
+                        <th colspan="${TOTAL_DAYS}">Ngày</th>
+                        <th class="sticky-col-header total-col text-sm p-2 text-blue-800 bg-blue-200">TỔNG BỮA</th>
+                        <th class="sticky-col-header price-col text-sm p-2 text-blue-800 bg-blue-200">THÀNH TIỀN (VNĐ)</th>
+                    </tr>
+                    
+                    <!-- Hàng 2: Ngày (1, 2, 3...) -->
+                    <tr>
+                        <th class="sticky-col-header text-sm p-2 stt-col bg-blue-800 border-b-2 border-blue-600">STT</th>
+                        <th class="sticky-col-header text-sm p-2 name-col bg-blue-800 border-b-2 border-blue-600">HỌ VÀ TÊN</th>
+            `;
+            
+            for (let d = 1; d <= TOTAL_DAYS; d++) {
+                const isCurrentMonth = d <= actualDaysInMonth;
+                const cellClass = !isCurrentMonth ? 'bg-gray-700 text-gray-400' : '';
+
+                header += `<th class="p-2 border-l border-blue-700 ${cellClass}">
+                                ${d}
+                            </th>`;
+            }
+            header += `<th class="sticky-col-header total-col border-l-2 border-indigo-300 text-sm p-2 text-blue-800 bg-blue-200 border-b-2 border-blue-600">Suất</th>`;
+            header += `<th class="sticky-col-header price-col border-l-2 border-indigo-300 text-sm p-2 text-blue-800 bg-blue-200 border-b-2 border-blue-600">Tổng/Người</th>`;
+            header += `</tr>`; 
+
+            // Hàng 3: Phụ đề Trưa/Chiều
+            header += `<tr class="bg-blue-700 text-xs text-white">
+                        <th class="sticky-col-header stt-col border-t border-blue-600 z-30"></th>
+                        <th class="sticky-col-header name-col border-t border-blue-600 z-30"></th>`;
+
+            for (let d = 1; d <= TOTAL_DAYS; d++) {
+                const isCurrentMonth = d <= actualDaysInMonth;
+                header += `<th class="p-1 border-l border-blue-600 font-normal ${!isCurrentMonth ? 'bg-gray-600' : ''}">
+                                <span class="text-green-300">Trưa</span> / <span class="text-red-300">Chiều</span>
+                            </th>`;
+            }
+
+            header += `<th class="sticky-col-header total-col border-t border-blue-600 border-l-2 border-indigo-300 bg-blue-200 z-30"></th>`;
+            header += `<th class="sticky-col-header price-col border-t border-blue-600 border-l-2 border-indigo-300 bg-blue-200 z-30"></th>`;
+
+            header += `</tr>`; 
+
+            // Hàng 4: CHỌN GIÁ - ĐÃ CẬP NHẬT STICKY
+            header += `<tr class="sticky-price-row text-xs text-blue-900 border-t-2 border-blue-400">
+                        <th class="sticky-col-header stt-col border-r-2 border-blue-300 font-extrabold text-sm"></th>
+                        <th class="sticky-col-header name-col border-r-2 border-blue-300 font-extrabold text-sm text-left px-2">CHỌN GIÁ ĐƠN VỊ</th>`;
+
+            for (let d = 1; d <= TOTAL_DAYS; d++) {
+                const isCurrentMonth = d <= actualDaysInMonth;
+                const color = dayConfig[d] || 'green';
+                const priceText = getPriceByColor(color).toLocaleString('vi-VN').replace(/₫/g, ''); 
+                
+                header += `<th class="p-1 border-l border-gray-300 font-normal ${!isCurrentMonth ? 'bg-gray-200' : 'day-price-cell'}">
+                            ${isCurrentMonth ? `
+                                <div class="price-dropdown">
+                                    <button 
+                                        id="day-price-btn-${d}"
+                                        onclick="toggleDropdown(${d})"
+                                        class="p-1 text-xs color-${color} rounded-md w-full font-bold flex items-center justify-center gap-1 shadow-md hover:shadow-lg transition"
+                                        title="Giá: ${getPriceByColor(color).toLocaleString('vi-VN')} VNĐ"
+                                    >
+                                        <span class="truncate">${priceText}</span>
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" class="feather feather-chevron-down text-gray-700">
+                                            <polyline points="6 9 12 15 18 9"></polyline>
+                                        </svg>
+                                    </button>
+                                    <div 
+                                        id="day-dropdown-content-${d}"
+                                        class="price-dropdown-content absolute right-0 mt-1 origin-top-right bg-white border border-gray-200 divide-y divide-gray-100 rounded-md shadow-xl opacity-0 invisible transition duration-150 z-50"
+                                    >
+                                        <button onclick="updateDayColor(${d}, 'green')" class="flex justify-between items-center w-full px-3 py-1 text-xs text-gray-700 hover:bg-gray-100 color-green">30,000 (Xanh)</button>
+                                        <button onclick="updateDayColor(${d}, 'yellow')" class="flex justify-between items-center w-full px-3 py-1 text-xs text-gray-700 hover:bg-gray-100 color-yellow">35,000 (Vàng)</button>
+                                        <button onclick="updateDayColor(${d}, 'red')" class="flex justify-between items-center w-full px-3 py-1 text-xs text-gray-700 hover:bg-gray-100 color-red">40,000 (Đỏ)</button>
+                                    </div>
+                                </div>
+                            ` : ''}
+                            </th>`;
+            }
+
+            header += `<th class="sticky-col-header total-col border-l-2 border-indigo-500 font-extrabold text-sm bg-blue-300"></th>`;
+            header += `<th class="sticky-col-header price-col border-l-2 border-red-500 font-extrabold text-sm bg-red-200"></th>`;
+            header += `</tr>`; 
+            header += `</thead>`;
+
+
+            // 2. Render Body
+            let body = `<tbody class="divide-y divide-gray-200">`;
+            let grandTotalMeals = 0;
+            let grandTotalPrice = 0;
+            
+            data.forEach((person, personIndex) => {
+                let personTotalMeals = 0;
+                let personTotalMoney = 0;
+                
+                const actualDaysInMonthForCalc = new Date(year, month, 0).getDate();
+                for (let d = 1; d <= actualDaysInMonthForCalc; d++) {
+                    const mealsForDay = person.meals[d] || { lunch: false, dinner: false };
+                    
+                    const dayColor = dayConfig[d] || 'green';
+                    const dayPrice = getPriceByColor(dayColor);
+
+                    let mealsCount = 0;
+                    if (mealsForDay.lunch) mealsCount++;
+                    if (mealsForDay.dinner) mealsCount++;
+
+                    personTotalMeals += mealsCount;
+                    personTotalMoney += mealsCount * dayPrice;
+                }
+
+                grandTotalMeals += personTotalMeals;
+                grandTotalPrice += personTotalMoney;
+                
+                body += `<tr class="hover:bg-gray-50">`;
+                
+                body += `<td class="sticky-col-name font-bold text-sm bg-gray-100 border-r border-gray-300 stt-col">${personIndex + 1}</td>`; 
+                
+                body += `
+                    <td class="sticky-col-name font-medium text-gray-800 border-r border-gray-300 name-col flex items-center justify-between h-full py-2 px-2 bg-white">
+                        <span class="truncate">${person.name}</span>
+                        <button 
+                            onclick="promptDeletePerson(${person.id}, '${person.name}')" 
+                            class="ml-2 p-1 text-red-500 hover:text-white hover:bg-red-600 rounded-full transition duration-150 ease-in-out flex-shrink-0"
+                            title="Xóa người này khỏi danh sách"
+                        >
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                        </button>
+                    </td>`;
+                
+                for (let d = 1; d <= TOTAL_DAYS; d++) {
+                    const mealsForDay = person.meals[d] || { lunch: false, dinner: false };
+                    const isCurrentMonth = d <= actualDaysInMonth;
+                    
+                    const dayColor = dayConfig[d] || 'green'; 
+                    const dayPrice = getPriceByColor(dayColor);
+
+                    let dayClass = '';
+                    if (!isCurrentMonth) {
+                        dayClass = 'bg-gray-200';
+                    } else if (dayColor === 'yellow') {
+                        dayClass = 'bg-yellow-100 border-yellow-300';
+                    } else if (dayColor === 'red') {
+                        dayClass = 'bg-red-100 border-red-300';
+                    }
+
+                    body += `
+                        <td class="border-l border-gray-300 ${dayClass}">
+                            <div class="meal-toggle-pair ${!isCurrentMonth ? 'opacity-50' : ''}">
+                                <!-- TRƯA -->
+                                <input 
+                                    type="checkbox" 
+                                    id="meal-${person.id}-${d}-lunch" 
+                                    class="form-checkbox text-green-600 focus:ring-green-500"
+                                    ${mealsForDay.lunch ? 'checked' : ''}
+                                    onclick="handleMealToggle(${person.id}, ${d}, 'lunch', this.checked)"
+                                    title="Trưa Ngày ${d} (Giá ${dayPrice.toLocaleString('vi-VN')} VNĐ)"
+                                    ${!isCurrentMonth ? 'disabled' : ''}
+                                />
+                                
+                                <!-- CHIỀU -->
+                                <input 
+                                    type="checkbox" 
+                                    id="meal-${person.id}-${d}-dinner" 
+                                    class="form-checkbox text-red-600 focus:ring-red-500"
+                                    ${mealsForDay.dinner ? 'checked' : ''}
+                                    onclick="handleMealToggle(${person.id}, ${d}, 'dinner', this.checked)"
+                                    title="Chiều Ngày ${d} (Giá ${dayPrice.toLocaleString('vi-VN')} VNĐ)"
+                                    ${!isCurrentMonth ? 'disabled' : ''}
+                                />
+                            </div>
+                        </td>
+                    `;
+                }
+
+                body += `<td class="sticky-col-name total-col text-blue-800 font-bold bg-blue-200">${personTotalMeals}</td>`;
+                body += `<td class="sticky-col-name price-col text-red-700 font-extrabold text-lg bg-blue-200">
+                            ${personTotalMoney.toLocaleString('vi-VN')}
+                        </td>`;
+                
+                body += `</tr>`; 
+            });
+            
+            body += `</tbody>`;
+
+            // 3. Render Footer (Tổng Cộng)
+            let footer = `<tfoot class="bg-blue-100 font-extrabold text-blue-900 border-t-2 border-blue-400">
+                <tr>
+                    <td class="sticky-col-name stt-col bg-blue-100 border-r border-blue-300" colspan="2">TỔNG CỘNG THÁNG ${month}</td>
+                    
+                    <td colspan="${TOTAL_DAYS}" class="text-right pr-4 text-base text-gray-700 font-medium">
+                        Tổng cộng (Tính theo giá linh hoạt từng ngày)
+                    </td>
+                    
+                    <td class="sticky-col-name total-col bg-blue-300 border-l-2 border-indigo-500 text-xl text-blue-900">
+                        ${grandTotalMeals} suất
+                    </td>
+                    
+                    <td class="sticky-col-name price-col bg-red-200 border-l-2 border-red-500 text-xl text-red-800">
+                        ${grandTotalPrice.toLocaleString('vi-VN')} VNĐ
+                    </td>
+                </tr>
+            </tfoot>`;
+
+            table.innerHTML = header + body + footer;
+            
+            info.innerHTML = `
+                <div class="flex flex-wrap gap-4 items-center">
+                    <p class="font-bold text-blue-700">Giá Đơn Vị:</p>
+                    <span class="text-sm px-2 py-1 rounded-md color-green">Xanh: 30,000 VNĐ</span>
+                    <span class="text-sm px-2 py-1 rounded-md color-yellow">Vàng: 35,000 VNĐ</span>
+                    <span class="text-sm px-2 py-1 rounded-md color-red">Đỏ: 40,000 VNĐ</span>
+                    <span class="text-gray-400">|</span>
+                    <p class="text-sm text-gray-500">Thay đổi được lưu tự động theo thời gian thực.</p>
+                </div>
+            `;
+        };
+    </script>
+</head>
+<body class="p-4 sm:p-8">
+
+    <div class="max-w-7xl mx-auto">
+        
+        <!-- Header & Status -->
+        <h1 class="text-3xl font-extrabold text-blue-900 mb-2">Bảng Đăng Ký Cơm Chia Sẻ</h1>
+        <p class="text-sm text-gray-600 mb-6">
+            <span id="app-status" class="font-medium text-red-600">Đang khởi tạo...</span>
+        </p>
+
+        <!-- Khu vực Tải (Loading) -->
+        <div id="loading-spinner" class="text-center py-12 hidden">
+            <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-500 mx-auto"></div>
+            <p class="mt-4 text-indigo-500 font-medium">Đang tải dữ liệu...</p>
+        </div>
+
+        <!-- 2. Khu vực Ứng dụng Bữa ăn -->
+        <div>
+            
+            <!-- Bộ Chọn Tháng/Năm -->
+            <div class="flex flex-col gap-4 items-start bg-white p-4 rounded-xl shadow-md mb-6">
+                <div class="flex flex-wrap gap-4 w-full items-center">
+                    <label class="text-lg font-semibold text-gray-700 mr-2">Chọn Tháng/Năm:</label>
+                    
+                    <select id="month-select" class="p-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 w-28" onchange="loadData()">
+                        <script>
+                            // Tự động chọn tháng hiện tại
+                            const todayMonth = new Date().getMonth() + 1;
+                            for(let i = 1; i <= 12; i++) {
+                                const value = i.toString().padStart(2, '0');
+                                const selected = i === todayMonth ? 'selected' : '';
+                                document.write(`<option value="${value}" ${selected}>Tháng ${i}</option>`);
+                            }
+                        </script>
+                    </select>
+                    
+                    <select id="year-select" class="p-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 w-28" onchange="loadData()">
+                        <script>
+                            // Tự động chọn năm hiện tại
+                            const currentYear = new Date().getFullYear();
+                            for(let i = currentYear - 2; i <= currentYear + 2; i++) {
+                                const selected = i === currentYear ? 'selected' : '';
+                                document.write(`<option value="${i}" ${selected}>${i}</option>`);
+                            }
+                        </script>
+                    </select>
+                </div>
+                
+                <div class="border-t border-gray-200 pt-4 mt-2 w-full">
+                    <p class="text-sm text-gray-500">Lưu ý: Giá một bữa được định nghĩa bằng cách chọn màu (Xanh/Vàng/Đỏ) ngay trên bảng.</p>
+                </div>
+            </div>
+
+            <!-- Chức năng Thêm Người -->
+            <div class="bg-indigo-50 p-4 rounded-xl shadow-md mb-6 flex flex-col sm:flex-row gap-4 items-center">
+                <label for="new-person-name" class="font-bold text-indigo-700">Thêm Người Mới:</label>
+                <input 
+                    type="text" 
+                    id="new-person-name" 
+                    placeholder="Nhập họ và tên..."
+                    class="p-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 flex-grow max-w-sm" 
+                    onkeyup="if(event.key==='Enter') addNewPerson()"
+                />
+                <button onclick="addNewPerson()" class="btn-primary bg-indigo-600 hover:bg-indigo-700 whitespace-nowrap">
+                    Thêm vào Danh Sách
+                </button>
+                <div id="add-person-message" class="text-sm font-medium ml-auto"></div>
+            </div>
+
+            <!-- Bảng Đăng Ký Cơm -->
+            <div class="table-container bg-white rounded-xl shadow-2xl">
+                <table id="meal-table" class="w-full border-collapse border border-gray-300">
+                    <!-- Table will be rendered here by JavaScript -->
+                </table>
+                
+                <div id="loading-indicator" class="hidden text-center p-4 text-blue-600 font-medium">
+                    Đang tải dữ liệu... Vui lòng chờ.
+                </div>
+                
+                <div id="table-info" class="p-4 text-sm text-gray-500 border-t border-gray-200">
+                    <!-- Info will be rendered here -->
+                </div>
+            </div>
+        </div>
+
+    </div>
+    
+    <!-- Modal Xác Nhận Xóa -->
+    <div id="delete-modal" class="modal fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center opacity-0 pointer-events-none z-50">
+        <div class="modal-content bg-white p-6 rounded-lg shadow-xl w-full max-w-md transform transition duration-300 ease-out scale-95">
+            <h3 class="text-xl font-bold text-red-600 mb-4">Xác Nhận Xóa Người Dùng</h3>
+            <p class="text-gray-700 mb-6">Bạn có chắc chắn muốn xóa **<span id="modal-person-name" class="font-bold"></span>** khỏi danh sách đăng ký cơm tháng này không? Thao tác này không thể hoàn tác.</p>
+            <div class="flex justify-end space-x-4">
+                <button 
+                    onclick="closeDeleteModal()" 
+                    class="px-4 py-2 text-gray-700 bg-gray-200 rounded-lg hover:bg-gray-300 transition"
+                >
+                    Hủy
+                </button>
+                <button 
+                    onclick="confirmDeletePerson()" 
+                    class="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 font-medium transition"
+                >
+                    Xóa Vĩnh Viễn
+                </button>
+            </div>
+        </div>
+    </div>
+
+
+    <script type="module">
+        // Khởi tạo Firebase khi trang tải xong
+        window.onload = () => {
+            // Thiết lập trạng thái ban đầu cho bộ chọn tháng/năm
+            const today = new Date();
+            document.getElementById('month-select').value = (today.getMonth() + 1).toString().padStart(2, '0');
+            document.getElementById('year-select').value = today.getFullYear();
+            
+            // Bắt đầu quá trình thiết lập Firebase và tải dữ liệu
+            setupFirebase();
+        };
+    </script>
+</body>
+</html>
